@@ -1,7 +1,18 @@
-import express from "express";
-import multer from "multer";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// Load .env manually (no dotenv dependency)
+try {
+  const envPath = join(dirname(fileURLToPath(import.meta.url)), ".env");
+  for (const line of readFileSync(envPath, "utf8").split("\n")) {
+    const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+  }
+} catch { /* no .env file — ok */ }
+
+import express from "express";
+import multer from "multer";
 
 import { searchJobs } from "./src/jobSources.mjs";
 import {

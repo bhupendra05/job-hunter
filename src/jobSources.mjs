@@ -167,6 +167,48 @@ async function fetchHimalayas(query) {
   });
 }
 
+// ---- Active Jobs DB (active-jobs-db.p.rapidapi.com) — real ATS postings
+// Pulls directly from company ATS systems (Workday, Greenhouse, Lever, SmartRecruiters…)
+// India city support confirmed. Set RAPIDAPI_KEY in .env to enable.
+// Endpoint: /active-ats  Required: time_frame (7d = last 7 days)
+async function fetchActiveJobsDB(query, location) {
+  const { RAPIDAPI_KEY } = process.env;
+  if (!RAPIDAPI_KEY) return [];
+  const params = new URLSearchParams({
+    time_frame: "7d",
+    limit: "20",
+    offset: "0",
+    title: query,
+  });
+  if (location) params.set("location", location);
+  const data = await safeFetchJson(
+    `https://active-jobs-db.p.rapidapi.com/active-ats?${params}`,
+    { headers: { "x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": "active-jobs-db.p.rapidapi.com" } }
+  );
+  if (!Array.isArray(data)) return [];
+  return data.map((j) => {
+    const locs = j.locations_alt || [];
+    const loc = locs[0] || (j.location_type === "REMOTE" ? "Remote" : "");
+    const aiSal =
+      j.ai_salary_min_value && j.ai_salary_max_value
+        ? `${j.ai_salary_currency || ""} ${Math.round(j.ai_salary_min_value)}–${Math.round(j.ai_salary_max_value)} ${j.ai_salary_unit_text || ""}`.trim()
+        : "";
+    return {
+      id: `activejobs-${j.id}`,
+      title: j.title,
+      company: j.organization || "",
+      location: loc,
+      remote: j.location_type === "REMOTE" || /remote/i.test(loc),
+      url: j.url || "",
+      description: clip(stripHtml(Array.isArray(j.ai_core_responsibilities) ? j.ai_core_responsibilities.join(" ") : (j.ai_requirements_summary || ""))),
+      tags: j.ai_key_skills || [],
+      salary: aiSal,
+      source: `ActiveJobs·${j.source || "ATS"}`,
+      postedAt: j.date_posted || "",
+    };
+  });
+}
+
 // ---- JSearch via RapidAPI — aggregates LinkedIn/Indeed/Glassdoor/ZipRecruiter
 // Free tier: 500 req/month. Set RAPIDAPI_KEY in .env to enable.
 // Best source for India-specific jobs — query includes city+country.
@@ -290,7 +332,8 @@ export async function searchJobs({ query, location = "" }) {
     fetchJobicy(query),
     fetchRemoteOK(query),
     fetchHimalayas(query),
-    fetchJSearch(query, location),   // LinkedIn/Indeed/Glassdoor — needs RAPIDAPI_KEY
+    fetchActiveJobsDB(query, location), // direct ATS postings incl. India — needs RAPIDAPI_KEY
+    fetchJSearch(query, location),      // LinkedIn/Indeed/Glassdoor — needs RAPIDAPI_KEY
     fetchUSAJobs(query, location),   // U.S. gov jobs — needs USAJOBS_API_KEY + USAJOBS_EMAIL
     fetchAdzuna(query, location),    // location-based — needs ADZUNA_APP_ID + ADZUNA_APP_KEY
   ]);
