@@ -209,9 +209,44 @@ async function fetchActiveJobsDB(query, location) {
   });
 }
 
+// ---- LinkedIn Job Search API (linkedin-job-search-api.p.rapidapi.com)
+// Direct LinkedIn postings with company details. India + worldwide support.
+// Endpoints: /active-jb-1h (last hour), /active-jb-7d (7 days), /active-jb-6m (6 months)
+async function fetchLinkedInJobs(query, location) {
+  const { RAPIDAPI_KEY } = process.env;
+  if (!RAPIDAPI_KEY) return [];
+  const params = new URLSearchParams({
+    offset: "0",
+    limit: "20",
+    title_filter: query,
+    description_type: "text",
+  });
+  if (location) params.set("location_filter", location);
+  const data = await safeFetchJson(
+    `https://linkedin-job-search-api.p.rapidapi.com/active-jb-7d?${params}`,
+    { headers: { "x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": "linkedin-job-search-api.p.rapidapi.com" } }
+  );
+  if (!Array.isArray(data)) return [];
+  return data.map((j) => {
+    const loc = (j.locations_derived || [])[0] || (j.remote_derived ? "Remote" : "");
+    return {
+      id: `linkedin-${j.linkedin_id || j.id}`,
+      title: j.title,
+      company: j.organization || "",
+      location: loc,
+      remote: !!j.remote_derived,
+      url: j.external_apply_url || j.url || "",
+      description: clip(stripHtml(j.description_text || "")),
+      tags: j.linkedin_org_industry ? [j.linkedin_org_industry] : [],
+      salary: "",
+      source: "LinkedIn",
+      postedAt: j.date_posted || "",
+    };
+  });
+}
+
 // ---- JSearch via RapidAPI — aggregates LinkedIn/Indeed/Glassdoor/ZipRecruiter
-// Free tier: 500 req/month. Set RAPIDAPI_KEY in .env to enable.
-// Best source for India-specific jobs — query includes city+country.
+// Free tier: 200 req/month. Set RAPIDAPI_KEY in .env to enable.
 async function fetchJSearch(query, location) {
   const { RAPIDAPI_KEY } = process.env;
   if (!RAPIDAPI_KEY) return [];
@@ -332,8 +367,9 @@ export async function searchJobs({ query, location = "" }) {
     fetchJobicy(query),
     fetchRemoteOK(query),
     fetchHimalayas(query),
-    fetchActiveJobsDB(query, location), // direct ATS postings incl. India — needs RAPIDAPI_KEY
-    fetchJSearch(query, location),      // LinkedIn/Indeed/Glassdoor — needs RAPIDAPI_KEY
+    fetchActiveJobsDB(query, location),  // direct ATS (Workday/Greenhouse/Lever) — needs RAPIDAPI_KEY
+    fetchLinkedInJobs(query, location),  // LinkedIn direct postings — needs RAPIDAPI_KEY
+    fetchJSearch(query, location),       // LinkedIn+Indeed+Glassdoor+ZipRecruiter — needs RAPIDAPI_KEY
     fetchUSAJobs(query, location),   // U.S. gov jobs — needs USAJOBS_API_KEY + USAJOBS_EMAIL
     fetchAdzuna(query, location),    // location-based — needs ADZUNA_APP_ID + ADZUNA_APP_KEY
   ]);
