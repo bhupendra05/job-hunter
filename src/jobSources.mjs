@@ -162,5 +162,23 @@ export async function searchJobs({ query, location = "" }) {
     fetchJobicy(query),
     fetchAdzuna(query, location),
   ]);
-  return dedupe(results.flat());
+  let jobs = dedupe(results.flat());
+
+  if (location.trim()) {
+    const loc = location.toLowerCase().trim();
+    // "Remote/Worldwide/Anywhere/Global" in the location field means the job is open to everyone.
+    // j.remote=true just means "the work is remote" — the job may still be USA/EU-only.
+    // So we check the location *text*, not the remote flag.
+    const OPEN_RE = /remote|worldwide|anywhere|global/i;
+    jobs = jobs.filter((j) => {
+      const jloc = (j.location || "").toLowerCase().trim();
+      if (!jloc) return true;                  // no restriction stated
+      if (OPEN_RE.test(jloc)) return true;     // explicitly open to all
+      if (jloc.includes(loc)) return true;     // exact / partial match
+      // multi-token match: user typed "bangalore india" → match either word
+      return loc.split(/[\s,]+/).some((word) => word.length > 2 && jloc.includes(word));
+    });
+  }
+
+  return jobs;
 }

@@ -130,6 +130,28 @@ app.post("/api/cover-letter", wrap(async (req, res) => {
   res.json(result);
 }));
 
+// ---- Debug endpoint (dev-only) -------------------------------------------
+app.post("/api/debug-resume", wrap(async (req, res) => {
+  const { apiKey, model } = creds(req);
+  if (!requireKey(res, apiKey)) return;
+  const { readFileSync } = await import("node:fs");
+  const pdfPath = `${process.env.HOME}/Downloads/BhupendraTale Resume in pdf.pdf`;
+  const pdfBase64 = readFileSync(pdfPath).toString("base64");
+  // Call Gemini raw — return full API response for diagnosis
+  const body = {
+    contents: [{ role: "user", parts: [
+      { inlineData: { mimeType: "application/pdf", data: pdfBase64 } },
+      { text: "Extract a JSON candidate profile. Return fields: name, targetTitles (array), seniority, yearsExperience (number), topSkills (array), locations (array), summary, highlights (array)." },
+    ]}],
+    generationConfig: { responseMimeType: "application/json", maxOutputTokens: 4096, temperature: 0.4, thinkingConfig: { thinkingBudget: 0 } },
+  };
+  const raw = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey }, body: JSON.stringify(body),
+  });
+  const data = await raw.json().catch(() => ({}));
+  res.json({ httpStatus: raw.status, finishReason: data?.candidates?.[0]?.finishReason, parts: (data?.candidates?.[0]?.content?.parts || []).map(p => ({ thought: p.thought, len: p.text?.length, preview: p.text?.slice(0, 200) })), error: data?.error });
+}));
+
 // ---- Application tracker -------------------------------------------------
 app.get("/api/applications", wrap(async (_req, res) => {
   res.json(await getApplications());

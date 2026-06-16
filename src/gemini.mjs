@@ -14,6 +14,8 @@ async function generateJSON({ apiKey, model, parts, systemInstruction, schema, m
       responseSchema: schema,
       maxOutputTokens,
       temperature: 0.4,
+      // Disable thinking for structured-output calls — thinking tokens bleed into JSON text on 2.5 models
+      thinkingConfig: { thinkingBudget: 0 },
     },
   };
   if (systemInstruction) body.systemInstruction = { parts: [{ text: systemInstruction }] };
@@ -26,21 +28,36 @@ async function generateJSON({ apiKey, model, parts, systemInstruction, schema, m
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error?.message || `Gemini error ${res.status}`);
 
-  const text =
-    (data?.candidates?.[0]?.content?.parts || [])
-      .map((p) => p.text)
-      .filter(Boolean)
-      .join("") || "";
+  const rawParts = data?.candidates?.[0]?.content?.parts || [];
+
+  // Strip thinking parts (gemini-2.5 models emit thought:true parts even with thinkingBudget:0 on some versions)
+  let text = rawParts
+    .filter((p) => !p.thought)
+    .map((p) => p.text)
+    .filter(Boolean)
+    .join("")
+    .trim();
+
   if (!text) {
     const reason = data?.candidates?.[0]?.finishReason || data?.promptFeedback?.blockReason;
-    throw new Error("Empty response from Gemini" + (reason ? ` (${reason})` : ""));
+    const detail = JSON.stringify(data).slice(0, 500);
+    throw new Error(`Empty Gemini response${reason ? ` (${reason})` : ""}. Raw: ${detail}`);
   }
+
+  // Strip markdown code fences that some Gemini versions wrap around JSON
+  text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+
   try {
     return JSON.parse(text);
   } catch {
-    const m = text.match(/\{[\s\S]*\}/);
-    if (m) return JSON.parse(m[0]);
-    throw new Error("Could not parse JSON from Gemini response.");
+    // Try to extract first JSON object or array
+    const mObj = text.match(/\{[\s\S]*\}/);
+    const mArr = text.match(/\[[\s\S]*\]/);
+    const candidate = mObj ? mObj[0] : mArr ? mArr[0] : null;
+    if (candidate) {
+      try { return JSON.parse(candidate); } catch { /* fall through */ }
+    }
+    throw new Error(`Gemini returned non-JSON. Preview: ${text.slice(0, 300)}`);
   }
 }
 
@@ -60,14 +77,14 @@ export async function listModels(apiKey) {
 const PROFILE_SCHEMA = {
   type: "OBJECT",
   properties: {
-    name: { type: "STRING" },
-    targetTitles: { type: "ARRAY", items: { type: "STRING" } },
-    seniority: { type: "STRING" },
+    name:            { type: "STRING" },
+    targetTitles:    { type: "ARRAY", items: { type: "STRING" } },
+    seniority:       { type: "STRING" },
     yearsExperience: { type: "NUMBER" },
-    topSkills: { type: "ARRAY", items: { type: "STRING" } },
-    locations: { type: "ARRAY", items: { type: "STRING" } },
-    summary: { type: "STRING" },
-    highlights: { type: "ARRAY", items: { type: "STRING" } },
+    topSkills:       { type: "ARRAY", items: { type: "STRING" } },
+    locations:       { type: "ARRAY", items: { type: "STRING" } },
+    summary:         { type: "STRING" },
+    highlights:      { type: "ARRAY", items: { type: "STRING" } },
   },
   required: ["name", "targetTitles", "seniority", "yearsExperience", "topSkills", "locations", "summary", "highlights"],
 };
@@ -85,7 +102,7 @@ export async function analyzeResume({ apiKey, model, pdfBase64, text, role, loca
       `"summary" should be a punchy 2-3 sentence positioning statement in the third person. ` +
       `"highlights" should be 4-6 of the strongest, most quantified achievements.`,
   });
-  return generateJSON({ apiKey, model, parts, schema: PROFILE_SCHEMA, maxOutputTokens: 2048 });
+  return generateJSON({ apiKey, model, parts, schema: PROFILE_SCHEMA, maxOutputTokens: 4096 });
 }
 
 // ---- Job ranking ---------------------------------------------------------
@@ -97,12 +114,12 @@ const RANK_SCHEMA = {
       items: {
         type: "OBJECT",
         properties: {
-          id: { type: "STRING" },
+          id:         { type: "STRING" },
           matchScore: { type: "INTEGER" },
-          tier: { type: "STRING", enum: ["Top-tier", "Strong company", "Mid", "Early startup", "Low credibility"] },
-          category: { type: "STRING", enum: ["Strong match", "Stretch", "High-probability"] },
+          tier:       { type: "STRING", enum: ["Top-tier", "Strong company", "Mid", "Early startup", "Low credibility"] },
+          category:   { type: "STRING", enum: ["Strong match", "Stretch", "High-probability"] },
           fitReasons: { type: "ARRAY", items: { type: "STRING" } },
-          gaps: { type: "ARRAY", items: { type: "STRING" } },
+          gaps:       { type: "ARRAY", items: { type: "STRING" } },
         },
         required: ["id", "matchScore", "tier", "category", "fitReasons", "gaps"],
       },
@@ -154,9 +171,9 @@ export async function rankJobs({ apiKey, model, profile, jobs }) {
 const COVER_SCHEMA = {
   type: "OBJECT",
   properties: {
-    coverLetter: { type: "STRING" },
-    resumeTailoring: { type: "ARRAY", items: { type: "STRING" } },
-    talkingPoints: { type: "ARRAY", items: { type: "STRING" } },
+    coverLetter:      { type: "STRING" },
+    resumeTailoring:  { type: "ARRAY", items: { type: "STRING" } },
+    talkingPoints:    { type: "ARRAY", items: { type: "STRING" } },
   },
   required: ["coverLetter", "resumeTailoring", "talkingPoints"],
 };

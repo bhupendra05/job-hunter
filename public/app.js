@@ -135,8 +135,13 @@ async function runSearch() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: q, location: loc }),
     });
-    if (!jobs.length) { status.textContent = "No jobs found — try broader keywords."; renderJobList([]); return; }
-    status.textContent = `Found ${jobs.length}. Ranking top matches with Gemini…`;
+    if (!jobs.length) {
+      status.textContent = loc
+        ? `No jobs found for "${loc}" — these boards are remote-focused. Try leaving location blank to see all remote roles.`
+        : "No jobs found — try broader keywords.";
+      renderJobList([]); return;
+    }
+    status.textContent = `Found ${jobs.length}${loc ? ` open to "${loc}" (worldwide + exact matches)` : ""}. Ranking with Gemini…`;
     const ranked = await api("/api/rank", {
       method: "POST", headers: aiHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ jobs }),
