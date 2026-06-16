@@ -108,6 +108,65 @@ async function fetchJobicy(query) {
   }));
 }
 
+// ---- RemoteOK (https://remoteok.com/api) — free, no key -----------------
+async function fetchRemoteOK(query) {
+  // RemoteOK filters by comma-separated tags; use the first meaningful word
+  const tag = query.split(/\s+/)[0].toLowerCase();
+  const data = await safeFetchJson(`https://remoteok.com/api?tags=${encodeURIComponent(tag)}&limit=50`);
+  if (!Array.isArray(data)) return [];
+  const q = query.toLowerCase();
+  return data
+    .filter((j) => j.id && j.position)
+    .filter(
+      (j) =>
+        !q ||
+        j.position?.toLowerCase().includes(q.split(/\s+/)[0]) ||
+        (j.tags || []).some((t) => q.split(/\s+/).some((w) => t.toLowerCase().includes(w)))
+    )
+    .map((j) => ({
+      id: `remoteok-${j.id}`,
+      title: j.position,
+      company: j.company || "",
+      location: j.location || "Worldwide",
+      remote: true,
+      url: j.url || `https://remoteok.com/remote-jobs/${j.slug}`,
+      description: clip(stripHtml(j.description || "")),
+      tags: Array.isArray(j.tags) ? j.tags : [],
+      salary: j.salary_min && j.salary_max ? `$${j.salary_min}–$${j.salary_max}` : "",
+      source: "RemoteOK",
+      postedAt: j.date || "",
+    }));
+}
+
+// ---- Himalayas (https://himalayas.app/jobs/api) — free, no key -----------
+async function fetchHimalayas(query) {
+  const data = await safeFetchJson(
+    `https://himalayas.app/jobs/api?limit=50&q=${encodeURIComponent(query)}`
+  );
+  if (!data?.jobs) return [];
+  return data.jobs.map((j) => {
+    const restrictions = j.locationRestrictions || [];
+    const location = restrictions.length ? restrictions.join(", ") : "Worldwide";
+    const sal =
+      j.minSalary && j.maxSalary
+        ? `${j.currency || ""}${Math.round(j.minSalary / 1000)}k–${Math.round(j.maxSalary / 1000)}k`
+        : "";
+    return {
+      id: `himalayas-${j.guid || Math.random()}`,
+      title: j.title,
+      company: j.companyName || "",
+      location,
+      remote: true,
+      url: j.applicationLink || `https://himalayas.app/companies/${j.companySlug}/jobs`,
+      description: clip(stripHtml(j.excerpt || j.description || "")),
+      tags: (j.categories || []).slice(0, 6).map((c) => c.toLowerCase().replace(/-/g, " ")),
+      salary: sal,
+      source: "Himalayas",
+      postedAt: j.pubDate || "",
+    };
+  });
+}
+
 // ---- Adzuna (optional, free tier — location-based coverage) ---------------
 async function fetchAdzuna(query, location) {
   const { ADZUNA_APP_ID, ADZUNA_APP_KEY, ADZUNA_COUNTRY = "gb" } = process.env;
@@ -160,22 +219,24 @@ export async function searchJobs({ query, location = "" }) {
     fetchRemotive(query),
     fetchArbeitnow(query),
     fetchJobicy(query),
+    fetchRemoteOK(query),
+    fetchHimalayas(query),
     fetchAdzuna(query, location),
   ]);
   let jobs = dedupe(results.flat());
 
   if (location.trim()) {
     const loc = location.toLowerCase().trim();
-    // "Remote/Worldwide/Anywhere/Global" in the location field means the job is open to everyone.
-    // j.remote=true just means "the work is remote" — the job may still be USA/EU-only.
-    // So we check the location *text*, not the remote flag.
-    const OPEN_RE = /remote|worldwide|anywhere|global/i;
+    // "Remote/Worldwide/Anywhere/Global" as the *entire* location = open to everyone.
+    // "Remote USA" / "US Remote" / "Remote, Europe" = geographically restricted.
+    // j.remote=true only means the work is remote, not that it's open to all countries.
+    const GLOBALLY_OPEN = /^(remote|worldwide|anywhere|global)$/i;
     jobs = jobs.filter((j) => {
       const jloc = (j.location || "").toLowerCase().trim();
-      if (!jloc) return true;                  // no restriction stated
-      if (OPEN_RE.test(jloc)) return true;     // explicitly open to all
-      if (jloc.includes(loc)) return true;     // exact / partial match
-      // multi-token match: user typed "bangalore india" → match either word
+      if (!jloc) return true;                         // no restriction stated
+      if (GLOBALLY_OPEN.test(jloc)) return true;      // exactly "Remote" / "Worldwide" etc.
+      if (jloc.includes(loc)) return true;            // exact / partial match with user's location
+      // multi-token: "bangalore india" → include if either word matches
       return loc.split(/[\s,]+/).some((word) => word.length > 2 && jloc.includes(word));
     });
   }
