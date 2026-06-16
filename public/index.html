@@ -7,10 +7,22 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header>
+  <!-- ambient glass background -->
+  <div class="bg">
+    <span class="blob b1"></span>
+    <span class="blob b2"></span>
+    <span class="blob b3"></span>
+  </div>
+
+  <header class="glass">
     <div class="logo">JH</div>
-    <h1>Job Hunter</h1>
-    <span class="sub">resume → ranked jobs → tailored applications</span>
+    <div class="title">
+      <h1>Job Hunter</h1>
+      <span class="sub">resume → ranked jobs → tailored applications</span>
+    </div>
+    <button id="settings-btn" class="key-pill" title="API settings">
+      <span id="key-dot" class="dot off"></span> ⚙ API key
+    </button>
   </header>
 
   <nav>
@@ -20,11 +32,16 @@
   </nav>
 
   <main>
+    <div id="key-banner" class="banner glass" style="display:none;">
+      <span>🔑 Add your free Gemini API key to unlock resume analysis, ranking &amp; cover letters.</span>
+      <button class="btn tiny" id="banner-open">Add key</button>
+    </div>
+
     <!-- PROFILE -->
     <section class="tab active" id="tab-profile">
-      <div class="card">
+      <div class="card glass">
         <h2>Your profile</h2>
-        <p class="hint">Upload your resume (PDF) or paste it as text. Claude extracts a structured profile that's used to score and tailor every job.</p>
+        <p class="hint">Upload your resume (PDF) or paste it. Gemini extracts a structured profile used to score &amp; tailor every job.</p>
         <form id="profile-form">
           <div class="row">
             <div>
@@ -44,14 +61,14 @@
         </form>
         <div id="profile-status" class="status-msg"></div>
       </div>
-      <div class="card" id="profile-view" style="display:none;"></div>
+      <div class="card glass" id="profile-view" style="display:none;"></div>
     </section>
 
     <!-- SEARCH -->
     <section class="tab" id="tab-search">
-      <div class="card">
+      <div class="card glass">
         <h2>Find &amp; rank jobs</h2>
-        <p class="hint">Searches free job boards (Remotive, Arbeitnow, Jobicy + Adzuna if configured), then Claude scores each posting against your profile.</p>
+        <p class="hint">Searches free job boards (Remotive, Arbeitnow, Jobicy + Adzuna if configured), then Gemini scores each posting against your profile.</p>
         <div class="row">
           <div>
             <label>Keywords</label>
@@ -70,7 +87,7 @@
 
     <!-- TRACKER -->
     <section class="tab" id="tab-tracker">
-      <div class="card">
+      <div class="card glass">
         <h2>Application tracker</h2>
         <p class="hint">Everything you save lands here. Move cards through the pipeline as you go.</p>
         <div class="cols" id="tracker-cols"></div>
@@ -78,9 +95,9 @@
     </section>
   </main>
 
-  <!-- Cover-letter modal -->
+  <!-- modal (settings + cover letters) -->
   <div class="modal-bg" id="modal-bg">
-    <div class="modal" id="modal"></div>
+    <div class="modal glass" id="modal"></div>
   </div>
 
   <script src="app.js"></script>

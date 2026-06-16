@@ -9,6 +9,82 @@ const api = async (url, opts) => {
 
 let lastRanked = []; // ranked jobs from the most recent search
 
+// ---- Gemini key / model (stored in this browser only) --------------------
+function aiHeaders(extra = {}) {
+  const h = { ...extra };
+  const key = localStorage.getItem("gemini_key");
+  const model = localStorage.getItem("gemini_model");
+  if (key) h["x-gemini-key"] = key;
+  if (model) h["x-gemini-model"] = model;
+  return h;
+}
+function refreshKeyUI() {
+  const has = !!localStorage.getItem("gemini_key");
+  $("#key-dot").className = "dot " + (has ? "on" : "off");
+  $("#key-banner").style.display = has ? "none" : "flex";
+}
+
+const modalBg = $("#modal-bg");
+modalBg.addEventListener("click", (e) => { if (e.target === modalBg) modalBg.classList.remove("open"); });
+const wireClose = () => $("#modal .close").addEventListener("click", () => modalBg.classList.remove("open"));
+
+function openSettings() {
+  modalBg.classList.add("open");
+  const key = localStorage.getItem("gemini_key") || "";
+  const model = localStorage.getItem("gemini_model") || "";
+  $("#modal").innerHTML = `
+    <button class="close">&times;</button>
+    <h2>Gemini API key</h2>
+    <div class="co">Free key from Google AI Studio. It's stored only in this browser and sent only to your local server.</div>
+    <label>API key</label>
+    <input type="password" id="set-key" placeholder="AIza…" value="${key}" />
+    <label>Model</label>
+    <select id="set-model"><option value="${model}">${model || "gemini-2.5-flash (default)"}</option></select>
+    <div class="help">No key yet? <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free one →</a></div>
+    <div class="actions">
+      <button class="btn tiny" id="set-save">Save</button>
+      <button class="btn ghost tiny" id="set-load">Load my models</button>
+    </div>
+    <div id="set-status" class="status-msg"></div>`;
+  wireClose();
+  $("#set-load").onclick = loadModels;
+  $("#set-save").onclick = saveSettings;
+}
+
+async function loadModels() {
+  const key = $("#set-key").value.trim();
+  const status = $("#set-status");
+  if (!key) { status.className = "status-msg err"; status.textContent = "Enter your key first."; return; }
+  status.className = "status-msg"; status.textContent = "Fetching your available models…";
+  try {
+    const { models } = await api("/api/models", { headers: { "x-gemini-key": key } });
+    if (!models.length) { status.textContent = "No usable models for this key."; return; }
+    const pick =
+      models.find((m) => /2\.5-flash/.test(m)) ||
+      models.find((m) => /flash/.test(m)) ||
+      models.find((m) => /pro/.test(m)) ||
+      models[0];
+    $("#set-model").innerHTML = models
+      .map((m) => `<option value="${m}" ${m === pick ? "selected" : ""}>${m}</option>`)
+      .join("");
+    status.textContent = `✓ ${models.length} models available — pick one and Save.`;
+  } catch (err) { status.className = "status-msg err"; status.textContent = err.message; }
+}
+
+function saveSettings() {
+  const key = $("#set-key").value.trim();
+  const model = $("#set-model").value;
+  if (key) localStorage.setItem("gemini_key", key); else localStorage.removeItem("gemini_key");
+  if (model) localStorage.setItem("gemini_model", model);
+  refreshKeyUI();
+  $("#set-status").className = "status-msg";
+  $("#set-status").textContent = "✓ Saved.";
+  setTimeout(() => modalBg.classList.remove("open"), 700);
+}
+
+$("#settings-btn").addEventListener("click", openSettings);
+$("#banner-open").addEventListener("click", openSettings);
+
 // ---- Tabs ----------------------------------------------------------------
 $$("nav button").forEach((b) =>
   b.addEventListener("click", () => {
@@ -30,8 +106,7 @@ function renderProfile(p) {
     <p class="hint">${p.summary || ""}</p>
     <div class="profile-grid">
       <div><div class="k">Target titles</div><div class="chips">${(p.targetTitles || [])
-        .map((t) => `<span class="chip">${t}</span>`)
-        .join("")}</div></div>
+        .map((t) => `<span class="chip">${t}</span>`).join("")}</div></div>
       <div><div class="k">Experience</div><div>${p.yearsExperience ?? "—"} yrs</div></div>
     </div>
     <div class="k" style="margin-top:14px;">Top skills</div>
@@ -46,10 +121,10 @@ $("#profile-form").addEventListener("submit", async (e) => {
   const status = $("#profile-status");
   btn.disabled = true;
   status.className = "status-msg";
-  status.textContent = "Analyzing your resume with Claude…";
+  status.textContent = "Analyzing your resume with Gemini…";
   try {
     const fd = new FormData(e.target);
-    const p = await api("/api/profile", { method: "POST", body: fd });
+    const p = await api("/api/profile", { method: "POST", body: fd, headers: aiHeaders() });
     renderProfile(p);
     status.textContent = "✓ Profile saved. Head to “Find & Rank”.";
     if (p.preferredRole) $("#q").value = p.preferredRole;
@@ -73,14 +148,10 @@ function scoreClass(s) {
 function jobCard(j) {
   const sc = scoreClass(j.matchScore);
   const reasons = (j.fitReasons || []).length
-    ? `<div class="reasons"><b>Why it fits</b><ul class="tight">${j.fitReasons
-        .map((r) => `<li>${r}</li>`)
-        .join("")}</ul></div>`
+    ? `<div class="reasons"><b>Why it fits</b><ul class="tight">${j.fitReasons.map((r) => `<li>${r}</li>`).join("")}</ul></div>`
     : "";
   const gaps = (j.gaps || []).length
-    ? `<div class="reasons"><b>Gaps</b><ul class="tight">${j.gaps
-        .map((r) => `<li>${r}</li>`)
-        .join("")}</ul></div>`
+    ? `<div class="reasons"><b>Gaps</b><ul class="tight">${j.gaps.map((r) => `<li>${r}</li>`).join("")}</ul></div>`
     : "";
   return `
     <div class="job">
@@ -89,8 +160,8 @@ function jobCard(j) {
           <h3>${j.title}</h3>
           <div class="co">${j.company || "—"}</div>
           <div class="meta"><span>📍 ${j.location || "—"}</span><span>🔗 ${j.source}</span>${
-    j.salary ? `<span>💰 ${j.salary}</span>` : ""
-  }</div>
+            j.salary ? `<span>💰 ${j.salary}</span>` : ""
+          }</div>
         </div>
         <div class="score ${sc}">${j.matchScore ?? "—"}<small>MATCH</small></div>
       </div>
@@ -124,10 +195,10 @@ $("#search-btn").addEventListener("click", async () => {
       body: JSON.stringify({ query: q, location: loc }),
     });
     if (!jobs.length) { status.textContent = "No jobs found — try broader keywords."; lastRanked = []; $("#results").innerHTML = ""; return; }
-    status.textContent = `Found ${jobs.length} jobs. Ranking the top matches with Claude…`;
+    status.textContent = `Found ${jobs.length} jobs. Ranking the top matches with Gemini…`;
     const ranked = await api("/api/rank", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: aiHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ jobs }),
     });
     lastRanked = ranked.jobs;
@@ -141,7 +212,6 @@ $("#search-btn").addEventListener("click", async () => {
   }
 });
 
-// Delegate cover-letter / track buttons
 $("#results").addEventListener("click", (e) => {
   const coverId = e.target.dataset.cover;
   const trackId = e.target.dataset.track;
@@ -150,33 +220,30 @@ $("#results").addEventListener("click", (e) => {
 });
 
 // ---- Cover letter modal --------------------------------------------------
-const modalBg = $("#modal-bg");
-modalBg.addEventListener("click", (e) => { if (e.target === modalBg) modalBg.classList.remove("open"); });
-
 async function openCover(job) {
   if (!job) return;
   modalBg.classList.add("open");
   $("#modal").innerHTML = `<button class="close">&times;</button>
     <h2>${job.title}</h2><div class="co">${job.company}</div>
-    <p class="empty">Writing a tailored cover letter with Claude…</p>`;
-  $("#modal .close").addEventListener("click", () => modalBg.classList.remove("open"));
+    <p class="empty">Writing a tailored cover letter with Gemini…</p>`;
+  wireClose();
   try {
     const r = await api("/api/cover-letter", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: aiHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ job }),
     });
     $("#modal").innerHTML = `<button class="close">&times;</button>
       <h2>${job.title}</h2><div class="co">${job.company}</div>
       <h4>Cover letter</h4>
-      <div class="letter" id="letter-text">${escapeHtml(r.coverLetter)}</div>
+      <div class="letter">${escapeHtml(r.coverLetter)}</div>
       <h4>Resume tailoring</h4><ul class="tight">${r.resumeTailoring.map((x) => `<li>${x}</li>`).join("")}</ul>
       <h4>Interview talking points</h4><ul class="tight">${r.talkingPoints.map((x) => `<li>${x}</li>`).join("")}</ul>
       <div class="actions">
         <button class="btn tiny" id="copy-letter">Copy letter</button>
         <button class="btn ghost tiny" id="save-letter">Save to tracker</button>
       </div>`;
-    $("#modal .close").addEventListener("click", () => modalBg.classList.remove("open"));
+    wireClose();
     $("#copy-letter").addEventListener("click", () => {
       navigator.clipboard.writeText(r.coverLetter);
       $("#copy-letter").textContent = "Copied ✓";
@@ -187,7 +254,7 @@ async function openCover(job) {
     });
   } catch (err) {
     $("#modal").innerHTML = `<button class="close">&times;</button><p class="status-msg err">${err.message}</p>`;
-    $("#modal .close").addEventListener("click", () => modalBg.classList.remove("open"));
+    wireClose();
   }
 }
 
@@ -246,7 +313,7 @@ async function loadTracker() {
       $("#modal").innerHTML = `<button class="close">&times;</button>
         <h2>${app.title}</h2><div class="co">${app.company}</div>
         <h4>Saved cover letter</h4><div class="letter">${escapeHtml(app.coverLetter || "")}</div>`;
-      $("#modal .close").addEventListener("click", () => modalBg.classList.remove("open"));
+      wireClose();
     })
   );
 }
@@ -261,12 +328,13 @@ function trackedCard(a) {
     <div class="links">
       ${a.url ? `<a href="${a.url}" target="_blank" rel="noopener">Open ↗</a>` : ""}
       ${a.coverLetter ? `<a href="#" data-letter="${a.id}">Letter</a>` : ""}
-      <a href="#" data-del="${a.id}" style="color:var(--red);">Remove</a>
+      <a href="#" data-del="${a.id}" style="color:#fca5a5;">Remove</a>
     </div>
   </div>`;
 }
 
 // ---- Init ----------------------------------------------------------------
+refreshKeyUI();
 (async () => {
   try {
     const p = await api("/api/profile");

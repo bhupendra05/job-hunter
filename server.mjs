@@ -4,7 +4,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { searchJobs } from "./src/jobSources.mjs";
-import { analyzeResume, rankJobs, writeCoverLetter } from "./src/claude.mjs";
+import {
+  analyzeResume,
+  rankJobs,
+  writeCoverLetter,
+  listModels,
+  DEFAULT_MODEL,
+} from "./src/gemini.mjs";
 import {
   getProfile,
   saveProfile,
@@ -21,11 +27,16 @@ const upload = multer({ limits: { fileSize: 12 * 1024 * 1024 } }); // 12 MB
 app.use(express.json({ limit: "4mb" }));
 app.use(express.static(join(__dirname, "public")));
 
-const need = (res) => {
-  if (!process.env.ANTHROPIC_API_KEY) {
+// Per-request Gemini credentials: prefer the key the browser sends, fall back to env.
+const creds = (req) => ({
+  apiKey: req.get("x-gemini-key") || process.env.GEMINI_API_KEY || "",
+  model: req.get("x-gemini-model") || DEFAULT_MODEL,
+});
+
+const requireKey = (res, apiKey) => {
+  if (!apiKey) {
     res.status(400).json({
-      error:
-        "ANTHROPIC_API_KEY is not set. Copy .env.example to .env, add your key, and restart.",
+      error: "No Gemini API key — open Settings (⚙ top-right) and paste your free key.",
     });
     return false;
   }
@@ -47,7 +58,8 @@ app.post(
   "/api/profile",
   upload.single("resume"),
   wrap(async (req, res) => {
-    if (!need(res)) return;
+    const { apiKey, model } = creds(req);
+    if (!requireKey(res, apiKey)) return;
     const { role = "", location = "", text = "" } = req.body || {};
     const pdfBase64 =
       req.file && req.file.mimetype === "application/pdf"
@@ -63,6 +75,8 @@ app.post(
     }
 
     const profile = await analyzeResume({
+      apiKey,
+      model,
       pdfBase64,
       text: resumeText,
       role,
@@ -85,25 +99,34 @@ app.post("/api/search", wrap(async (req, res) => {
 }));
 
 app.post("/api/rank", wrap(async (req, res) => {
-  if (!need(res)) return;
+  const { apiKey, model } = creds(req);
+  if (!requireKey(res, apiKey)) return;
   const profile = await getProfile();
   if (!profile)
     return res.status(400).json({ error: "Add your resume first (Profile tab)." });
   const { jobs = [] } = req.body || {};
   if (!jobs.length) return res.status(400).json({ error: "No jobs to rank." });
-  const ranked = await rankJobs({ profile, jobs });
+  const ranked = await rankJobs({ apiKey, model, profile, jobs });
   res.json({ jobs: ranked });
+}));
+
+// Models the supplied key can use — populates the Settings dropdown.
+app.get("/api/models", wrap(async (req, res) => {
+  const { apiKey } = creds(req);
+  if (!requireKey(res, apiKey)) return;
+  res.json({ models: await listModels(apiKey) });
 }));
 
 // ---- Cover letter --------------------------------------------------------
 app.post("/api/cover-letter", wrap(async (req, res) => {
-  if (!need(res)) return;
+  const { apiKey, model } = creds(req);
+  if (!requireKey(res, apiKey)) return;
   const profile = await getProfile();
   if (!profile)
     return res.status(400).json({ error: "Add your resume first (Profile tab)." });
   const { job } = req.body || {};
   if (!job) return res.status(400).json({ error: "No job provided." });
-  const result = await writeCoverLetter({ profile, job });
+  const result = await writeCoverLetter({ apiKey, model, profile, job });
   res.json(result);
 }));
 
@@ -130,6 +153,6 @@ app.delete("/api/applications/:id", wrap(async (req, res) => {
 const PORT = process.env.PORT || 4500;
 app.listen(PORT, () => {
   console.log(`\n  job-hunter dashboard → http://localhost:${PORT}\n`);
-  if (!process.env.ANTHROPIC_API_KEY)
-    console.log("  ⚠  ANTHROPIC_API_KEY not set — add it to .env before using AI features.\n");
+  if (!process.env.GEMINI_API_KEY)
+    console.log("  ℹ  No GEMINI_API_KEY in env — add your free key in the web UI (⚙ Settings).\n");
 });
