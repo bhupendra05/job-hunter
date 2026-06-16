@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Job Hunter</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <div class="logo">JH</div>
+    <h1>Job Hunter</h1>
+    <span class="sub">resume → ranked jobs → tailored applications</span>
+  </header>
+
+  <nav>
+    <button data-tab="profile" class="active">1 · Profile</button>
+    <button data-tab="search">2 · Find &amp; Rank</button>
+    <button data-tab="tracker">3 · Tracker</button>
+  </nav>
+
+  <main>
+    <!-- PROFILE -->
+    <section class="tab active" id="tab-profile">
+      <div class="card">
+        <h2>Your profile</h2>
+        <p class="hint">Upload your resume (PDF) or paste it as text. Claude extracts a structured profile that's used to score and tailor every job.</p>
+        <form id="profile-form">
+          <div class="row">
+            <div>
+              <label>Target role</label>
+              <input type="text" name="role" placeholder="e.g. Senior Backend Engineer" />
+            </div>
+            <div>
+              <label>Preferred location</label>
+              <input type="text" name="location" placeholder="e.g. Remote, or Bangalore" />
+            </div>
+          </div>
+          <label>Resume PDF</label>
+          <input type="file" name="resume" accept="application/pdf,.txt,.md" />
+          <label>…or paste resume text</label>
+          <textarea name="text" placeholder="Paste your resume here if you don't have a PDF handy"></textarea>
+          <button type="submit" class="btn">Analyze resume</button>
+        </form>
+        <div id="profile-status" class="status-msg"></div>
+      </div>
+      <div class="card" id="profile-view" style="display:none;"></div>
+    </section>
+
+    <!-- SEARCH -->
+    <section class="tab" id="tab-search">
+      <div class="card">
+        <h2>Find &amp; rank jobs</h2>
+        <p class="hint">Searches free job boards (Remotive, Arbeitnow, Jobicy + Adzuna if configured), then Claude scores each posting against your profile.</p>
+        <div class="row">
+          <div>
+            <label>Keywords</label>
+            <input type="text" id="q" placeholder="e.g. react, python, devops" />
+          </div>
+          <div>
+            <label>Location (Adzuna only)</label>
+            <input type="text" id="loc" placeholder="optional" />
+          </div>
+        </div>
+        <button class="btn" id="search-btn">Find &amp; rank</button>
+        <div id="search-status" class="status-msg"></div>
+      </div>
+      <div id="results"></div>
+    </section>
+
+    <!-- TRACKER -->
+    <section class="tab" id="tab-tracker">
+      <div class="card">
+        <h2>Application tracker</h2>
+        <p class="hint">Everything you save lands here. Move cards through the pipeline as you go.</p>
+        <div class="cols" id="tracker-cols"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Cover-letter modal -->
+  <div class="modal-bg" id="modal-bg">
+    <div class="modal" id="modal"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
