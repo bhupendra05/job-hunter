@@ -7,99 +7,90 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- ambient glass background -->
   <div class="bg">
-    <span class="blob b1"></span>
-    <span class="blob b2"></span>
-    <span class="blob b3"></span>
+    <span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span>
   </div>
 
-  <header class="glass">
-    <div class="logo">JH</div>
-    <div class="title">
-      <h1>Job Hunter</h1>
-      <span class="sub">resume → ranked jobs → tailored applications</span>
-    </div>
-    <button id="settings-btn" class="key-pill" title="API settings">
-      <span id="key-dot" class="dot off"></span> ⚙ API key
-    </button>
-  </header>
+  <div class="app">
+    <!-- icon rail -->
+    <aside class="rail glass">
+      <div class="logo">JH</div>
+      <nav>
+        <button data-view="jobs" class="active" title="Find & Rank">🔍</button>
+        <button data-view="tracker" title="Tracker">📌</button>
+        <button data-view="profile" title="Profile">👤</button>
+        <button data-view="settings" title="API key">⚙</button>
+      </nav>
+      <div class="rail-foot"><span id="rail-avatar" class="avatar-sm">•</span></div>
+    </aside>
 
-  <nav>
-    <button data-tab="profile" class="active">1 · Profile</button>
-    <button data-tab="search">2 · Find &amp; Rank</button>
-    <button data-tab="tracker">3 · Tracker</button>
-  </nav>
-
-  <main>
-    <div id="key-banner" class="banner glass" style="display:none;">
-      <span>🔑 Add your free Gemini API key to unlock resume analysis, ranking &amp; cover letters.</span>
-      <button class="btn tiny" id="banner-open">Add key</button>
-    </div>
-
-    <!-- PROFILE -->
-    <section class="tab active" id="tab-profile">
-      <div class="card glass">
-        <h2>Your profile</h2>
-        <p class="hint">Upload your resume (PDF) or paste it. Gemini extracts a structured profile used to score &amp; tailor every job.</p>
-        <form id="profile-form">
-          <div class="row">
-            <div>
-              <label>Target role</label>
-              <input type="text" name="role" placeholder="e.g. Senior Backend Engineer" />
-            </div>
-            <div>
-              <label>Preferred location</label>
-              <input type="text" name="location" placeholder="e.g. Remote, or Bangalore" />
-            </div>
-          </div>
-          <label>Resume PDF</label>
-          <input type="file" name="resume" accept="application/pdf,.txt,.md" />
-          <label>…or paste resume text</label>
-          <textarea name="text" placeholder="Paste your resume here if you don't have a PDF handy"></textarea>
-          <button type="submit" class="btn">Analyze resume</button>
-        </form>
-        <div id="profile-status" class="status-msg"></div>
-      </div>
-      <div class="card glass" id="profile-view" style="display:none;"></div>
-    </section>
-
-    <!-- SEARCH -->
-    <section class="tab" id="tab-search">
-      <div class="card glass">
-        <h2>Find &amp; rank jobs</h2>
-        <p class="hint">Searches free job boards (Remotive, Arbeitnow, Jobicy + Adzuna if configured), then Gemini scores each posting against your profile.</p>
-        <div class="row">
-          <div>
-            <label>Keywords</label>
-            <input type="text" id="q" placeholder="e.g. react, python, devops" />
-          </div>
-          <div>
-            <label>Location (Adzuna only)</label>
-            <input type="text" id="loc" placeholder="optional" />
-          </div>
+    <div class="workspace">
+      <!-- top bar with global search -->
+      <div class="topbar glass">
+        <div class="search-wrap">
+          <span class="search-ic">🔍</span>
+          <input type="text" id="q" placeholder="Search roles — react, python, devops…" />
+          <input type="text" id="loc" class="loc" placeholder="location" />
+          <button class="btn" id="search-btn">Find &amp; Rank</button>
         </div>
-        <button class="btn" id="search-btn">Find &amp; rank</button>
-        <div id="search-status" class="status-msg"></div>
+        <button id="settings-btn" class="key-pill" title="API settings">
+          <span id="key-dot" class="dot off"></span> ⚙ API key
+        </button>
       </div>
-      <div id="results"></div>
-    </section>
 
-    <!-- TRACKER -->
-    <section class="tab" id="tab-tracker">
-      <div class="card glass">
-        <h2>Application tracker</h2>
-        <p class="hint">Everything you save lands here. Move cards through the pipeline as you go.</p>
-        <div class="cols" id="tracker-cols"></div>
+      <div id="key-banner" class="banner glass" style="display:none;">
+        <span>🔑 Add your free Gemini API key to unlock resume analysis, ranking &amp; cover letters.</span>
+        <button class="btn tiny" id="banner-open">Add key</button>
       </div>
-    </section>
-  </main>
 
-  <!-- modal (settings + cover letters) -->
-  <div class="modal-bg" id="modal-bg">
-    <div class="modal glass" id="modal"></div>
+      <!-- JOBS VIEW (3 panes) -->
+      <section class="view active" id="view-jobs">
+        <div class="jobs-grid">
+          <div class="joblist glass">
+            <div class="joblist-head"><span id="joblist-title">Jobs</span><span id="joblist-count" class="pill-count">0</span></div>
+            <div id="search-status" class="status-msg"></div>
+            <div id="joblist-items"></div>
+          </div>
+
+          <div class="detail glass" id="detail"></div>
+
+          <aside id="sidepanel"></aside>
+        </div>
+      </section>
+
+      <!-- PROFILE VIEW -->
+      <section class="view" id="view-profile">
+        <div class="card glass">
+          <h2>Your profile</h2>
+          <p class="hint">Upload your resume (PDF) or paste it. Gemini extracts a structured profile used to score &amp; tailor every job.</p>
+          <form id="profile-form">
+            <div class="row">
+              <div><label>Target role</label><input type="text" name="role" placeholder="e.g. Senior Backend Engineer" /></div>
+              <div><label>Preferred location</label><input type="text" name="location" placeholder="e.g. Remote, or Bangalore" /></div>
+            </div>
+            <label>Resume PDF</label>
+            <input type="file" name="resume" accept="application/pdf,.txt,.md" />
+            <label>…or paste resume text</label>
+            <textarea name="text" placeholder="Paste your resume here if you don't have a PDF handy"></textarea>
+            <button type="submit" class="btn">Analyze resume</button>
+          </form>
+          <div id="profile-status" class="status-msg"></div>
+        </div>
+        <div class="card glass" id="profile-view" style="display:none;"></div>
+      </section>
+
+      <!-- TRACKER VIEW -->
+      <section class="view" id="view-tracker">
+        <div class="card glass">
+          <h2>Application tracker</h2>
+          <p class="hint">Everything you save lands here. Move cards through the pipeline as you go.</p>
+          <div class="cols" id="tracker-cols"></div>
+        </div>
+      </section>
+    </div>
   </div>
 
+  <div class="modal-bg" id="modal-bg"><div class="modal glass" id="modal"></div></div>
   <script src="app.js"></script>
 </body>
 </html>
