@@ -103,13 +103,13 @@ function timeAgo(iso) {
   if (d < 30) return `${Math.floor(d)} days ago`;
   return `${Math.floor(d / 30)} mo ago`;
 }
-function scoreColor(s) { return s == null ? "var(--faint)" : s >= 75 ? "#34d399" : s >= 50 ? "#fbbf24" : "#f87171"; }
+function scoreColor(s) { return s == null ? "#94a3b8" : s >= 75 ? "#10b981" : s >= 50 ? "#f59e0b" : "#ef4444"; }
 function buildRing(score, size = 132) {
   const r = 56, c = 2 * Math.PI * r, pct = score == null ? 0 : Math.max(0, Math.min(100, score));
   const off = c * (1 - pct / 100), col = scoreColor(score), cx = size / 2;
   return `<div class="ring" style="width:${size}px;height:${size}px;">
     <svg width="${size}" height="${size}">
-      <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="12"/>
+      <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="#e8ecf3" stroke-width="12"/>
       <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${col}" stroke-width="12" stroke-linecap="round"
         stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/>
     </svg>
