@@ -167,6 +167,75 @@ async function fetchHimalayas(query) {
   });
 }
 
+// ---- JSearch via RapidAPI — aggregates LinkedIn/Indeed/Glassdoor/ZipRecruiter
+// Free tier: 500 req/month. Set RAPIDAPI_KEY in .env to enable.
+// Best source for India-specific jobs — query includes city+country.
+async function fetchJSearch(query, location) {
+  const { RAPIDAPI_KEY } = process.env;
+  if (!RAPIDAPI_KEY) return [];
+  const q = location ? `${query} jobs in ${location}` : `${query} jobs`;
+  const url = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(q)}&num_pages=2&date_posted=month`;
+  const data = await safeFetchJson(url, {
+    headers: { "x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": "jsearch.p.rapidapi.com" },
+  });
+  if (!data?.data) return [];
+  return data.data.map((j) => {
+    const parts = [j.job_city, j.job_state, j.job_country].filter(Boolean);
+    return {
+      id: `jsearch-${j.job_id}`,
+      title: j.job_title,
+      company: j.employer_name || "",
+      location: parts.join(", ") || (j.job_is_remote ? "Remote" : ""),
+      remote: !!j.job_is_remote,
+      url: j.job_apply_link || "",
+      description: clip(stripHtml(j.job_description || "")),
+      tags: [],
+      salary:
+        j.job_min_salary && j.job_max_salary
+          ? `${j.job_salary_currency || ""} ${Math.round(j.job_min_salary)}–${Math.round(j.job_max_salary)}`
+          : "",
+      source: `JSearch·${j.job_publisher || "Indeed"}`,
+      postedAt: j.job_posted_at_datetime_utc || "",
+    };
+  });
+}
+
+// ---- USAJOBS — official U.S. government job board, free API key
+// Register free at https://developer.usajobs.gov/ to get USAJOBS_API_KEY.
+// Set USAJOBS_EMAIL (the email you used to register) + USAJOBS_API_KEY in .env.
+async function fetchUSAJobs(query, location) {
+  const { USAJOBS_API_KEY, USAJOBS_EMAIL } = process.env;
+  if (!USAJOBS_API_KEY || !USAJOBS_EMAIL) return [];
+  const params = new URLSearchParams({ Keyword: query, ResultsPerPage: "25" });
+  if (location) params.set("LocationName", location);
+  const data = await safeFetchJson(`https://data.usajobs.gov/api/search?${params}`, {
+    headers: {
+      "User-Agent": `job-hunter/1.0 ${USAJOBS_EMAIL}`,
+      "Authorization-Key": USAJOBS_API_KEY,
+      Host: "data.usajobs.gov",
+    },
+  });
+  if (!data?.SearchResult) return [];
+  return (data.SearchResult.SearchResultItems || []).map((item) => {
+    const j = item.MatchedObjectDescriptor;
+    const rem = j.PositionSchedule?.[0]?.Name || "";
+    const salObj = j.PositionRemuneration?.[0];
+    return {
+      id: `usajobs-${j.PositionID}`,
+      title: j.PositionTitle,
+      company: j.OrganizationName || "U.S. Government",
+      location: j.PositionLocationDisplay || "USA",
+      remote: /remote|telework/i.test(rem),
+      url: j.PositionURI || "",
+      description: clip(stripHtml(j.UserArea?.Details?.MajorDuties?.[0] || j.QualificationSummary || "")),
+      tags: (j.JobCategory || []).map((c) => c.Name),
+      salary: salObj ? `${salObj.MinimumRange}–${salObj.MaximumRange} ${salObj.RateIntervalCode}` : "",
+      source: "USAJobs",
+      postedAt: j.PublicationStartDate || "",
+    };
+  });
+}
+
 // ---- Adzuna (optional, free tier — location-based coverage) ---------------
 async function fetchAdzuna(query, location) {
   const { ADZUNA_APP_ID, ADZUNA_APP_KEY, ADZUNA_COUNTRY = "gb" } = process.env;
@@ -221,7 +290,9 @@ export async function searchJobs({ query, location = "" }) {
     fetchJobicy(query),
     fetchRemoteOK(query),
     fetchHimalayas(query),
-    fetchAdzuna(query, location),
+    fetchJSearch(query, location),   // LinkedIn/Indeed/Glassdoor — needs RAPIDAPI_KEY
+    fetchUSAJobs(query, location),   // U.S. gov jobs — needs USAJOBS_API_KEY + USAJOBS_EMAIL
+    fetchAdzuna(query, location),    // location-based — needs ADZUNA_APP_ID + ADZUNA_APP_KEY
   ]);
   let jobs = dedupe(results.flat());
 
